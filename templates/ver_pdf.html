@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ver PDF y Seleccionar Páginas</title>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #container {
+            display: flex;
+        }
+        #thumbnail-viewer {
+            width: 20%;
+            border-right: 1px solid #000;
+            overflow-y: auto;
+            height: 800px;
+        }
+        #pdf-viewer {
+            width: 80%;
+            padding: 10px;
+            position: relative;
+        }
+        .thumbnail-container {
+            display: flex;
+            align-items: center;
+            margin: 10px;
+        }
+        .thumbnail {
+            cursor: pointer;
+            border: 1px solid #ccc;
+        }
+        .thumbnail.selected {
+            border: 2px solid red;
+        }
+        .page-number {
+            margin-left: 10px;
+        }
+        .preview {
+            width: 100%;
+            border: 1px solid #000;
+        }
+        .controls {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px;
+        }
+        .controls form {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ver PDF y Seleccionar Páginas</h1>
+    <div class="controls">
+        <form action="/separar" method="post">
+            <input type="hidden" name="nombre_archivo" value="{{ nombre_archivo }}">
+            <input type="hidden" id="paginas" name="paginas">
+            <button type="submit">Separar</button>
+        </form>
+    </div>
+    <div id="container">
+        <div id="thumbnail-viewer"></div>
+        <div id="pdf-viewer"></div>
+    </div>
+
+    <script>
+        const url = '{{ url_for('static', filename=nombre_archivo) }}';
+        const pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js';
+
+        let pdfDoc = null;
+        const thumbnailViewer = document.getElementById('thumbnail-viewer');
+        const pdfViewer = document.getElementById('pdf-viewer');
+        const selectedPages = new Set();
+
+        const renderThumbnail = num => {
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale: 0.2 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                canvas.classList.add('thumbnail');
+                canvas.dataset.pageNumber = num;
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                page.render(renderContext).promise.then(() => {
+                    const thumbnailContainer = document.createElement('div');
+                    thumbnailContainer.classList.add('thumbnail-container');
+                    const pageNumberText = document.createElement('span');
+                    pageNumberText.classList.add('page-number');
+                    pageNumberText.textContent = `Página ${num}`;
+
+                    thumbnailContainer.appendChild(canvas);
+                    thumbnailContainer.appendChild(pageNumberText);
+                    thumbnailViewer.appendChild(thumbnailContainer);
+                });
+            });
+        };
+
+        const renderPreview = num => {
+            pdfDoc.getPage(num).then(page => {
+                pdfViewer.innerHTML = '';
+                const viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                canvas.classList.add('preview');
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                page.render(renderContext).promise.then(() => {
+                    pdfViewer.appendChild(canvas);
+                });
+            });
+        };
+
+        pdfjsLib.getDocument(url).promise.then(pdfDoc_ => {
+            pdfDoc = pdfDoc_;
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                renderThumbnail(i);
+            }
+        });
+
+        thumbnailViewer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('thumbnail')) {
+                const pageNumber = parseInt(event.target.dataset.pageNumber);
+                renderPreview(pageNumber);
+                if (selectedPages.has(pageNumber)) {
+                    selectedPages.delete(pageNumber);
+                    event.target.classList.remove('selected');
+                } else {
+                    selectedPages.add(pageNumber);
+                    event.target.classList.add('selected');
+                }
+                document.getElementById('paginas').value = Array.from(selectedPages).join(',');
+            }
+        });
+    </script>
+</body>
+</html>
